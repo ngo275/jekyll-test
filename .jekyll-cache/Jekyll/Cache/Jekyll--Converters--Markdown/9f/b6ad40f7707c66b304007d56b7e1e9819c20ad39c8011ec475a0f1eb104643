@@ -1,0 +1,158 @@
+I""<p>In recent years, Identity and Access Management has gained importance within technology industries as attackers continue to target large corporations in order to gain access to private data and services. To address this issue, the Grab Identity team has been using a 6-digit PIN to authenticate a user during a sensitive transaction such as accessing a GrabPay Wallet. We also use SMS one-time passwords (OTPs) to log a user into the application.</p>
+
+<p>We look at existing mechanisms that Grab uses to authenticate its users and how biometric authentication helps strengthen application security and save costs. We also look at the various technical decisions taken to ensure the robustness of this feature as well as some key learnings.</p>
+
+<h2 id="introduction">Introduction</h2>
+
+<p>The mechanisms we use to authenticate our users have evolved as the Grab Identity team consistently refines our approach. Over the years, we have observed several things:</p>
+
+<ul>
+  <li>OTP and Personal Identification Number (PIN) are susceptible to hacking and social engineering.</li>
+  <li>These methods have high user friction (e.g. delay or failure to receive SMS, need to launch Facebook/Google).</li>
+  <li>Shared/rented driver accounts cause safety concerns for passengers and increases potential for fraud.</li>
+  <li>High OTP costs at $0.03/SMS.</li>
+</ul>
+
+<p>Social engineering efforts have gotten more advanced - attackers could pretend to be your friends and ask for your OTP or even post phishing advertisements that prompt for your personal information.</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><img src="/img/biometrics-authentication/image3.png" alt="Search data flow" /></td>
+      <td><img src="/img/biometrics-authentication/image1.png" alt="Search data flow" /></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="post-image-section"><figure>
+  <img src="/img/biometrics-authentication/image2.png" alt="Search data flow" style="width:60%" />
+  </figure>
+</div>
+
+<p>With more sophisticated social engineering attacks on the rise, we need solutions that can continue to protect our users and Grab in the long run.</p>
+
+<h2 id="background">Background</h2>
+
+<p>When we looked into developing solutions for these problems, which was mainly about cost and security, we went back to basics and looked at what a secure system meant.</p>
+
+<ul>
+  <li>Knowledge Factor: Something that you know (password, PIN, some other data)</li>
+  <li>Possession Factor: Something physical that you have (device, keycards)</li>
+  <li>Inherent Factor: Something that you are (face ID, fingerprint, voice)</li>
+</ul>
+
+<p>We then compared the various authentication mechanisms that the Grab app currently uses, as shown in the following table:</p>
+
+<table border="1" style="text-align: center">
+<tr style="text-align:center">
+  <td> <strong>Authentication factor</strong></td>
+  <td> <strong>1. Something that you know</strong> </td>
+  <td> <strong>2. Something physical that you have</strong> </td>
+  <td> <strong>3. Something that you are</strong> </td>
+</tr>
+<tr>
+  <td>OTP</td>
+  <td>✔️</td>
+  <td>✔️</td>
+  <td></td>
+</tr>
+<tr>
+  <td>Social</td>
+  <td>✔️</td>
+  <td></td>
+  <td></td>
+</tr>
+<tr>
+  <td>PIN</td>
+  <td>✔️</td>
+  <td></td>
+  <td></td>
+</tr>
+<tr>
+  <td>Biometrics</td>
+  <td></td>
+  <td>✔️</td>
+  <td>✔️</td>
+</tr>
+</table>
+
+<p>With methods based on the knowledge and possession factors, it is still possible for attackers to get users to reveal sensitive account information. On the other hand, biometrics are something you are born with and that makes it more complex to mimic. Hence, we have added biometrics as an additional layer to enhance Grab’s existing authentication methods and build a more secure platform for our users.</p>
+
+<h2 id="solution">Solution</h2>
+
+<p>Biometric authentication powered by device biometrics provides a robust platform to enhance trust. This is because modern phones provide a few key features that allow client server trust to be established:</p>
+
+<ol>
+  <li>Biometric sensor (fingerprint or face ID).</li>
+  <li>Advent of devices with secure enclaves.</li>
+</ol>
+
+<p>A secure enclave, being a part of the device, is separate from the main operating system (OS) at the kernel level. The enclave is used to store private keys that can be unlocked only by the biometrics on the device.</p>
+
+<p>Any changes to device security such as changing a PIN or adding another fingerprint will invalidate all prior access to this secure enclave. This means that when we enroll a user in biometrics this way, we can be sure that any payload from said device that matches the public part of said private key is authorised by the user that created it.</p>
+
+<div class="post-image-section"><figure>
+  <img src="/img/biometrics-authentication/image4.png" alt="Search data flow" style="width:60%" />
+  </figure>
+</div>
+
+<div class="post-image-section"><figure>
+  <img src="/img/biometrics-authentication/image6.png" alt="Search data flow" style="width:60%" />
+  </figure>
+</div>
+
+<h3 id="architecture-details">Architecture details</h3>
+
+<p>The important part of the approach lies in the enrollment flow. The process is quite simple and can be described in the following steps:</p>
+
+<ol>
+  <li>Create an elevated public/private key pair that requires users authentication.</li>
+  <li>Ask users to authenticate in order to prove they are the device holders.</li>
+  <li>Sign payload with confirmed unlocked private key and send public key to finish enrolling.</li>
+  <li>Store returned reference id in the encrypted shared preferences/keychain.</li>
+</ol>
+
+<div class="post-image-section"><figure>
+  <img src="/img/biometrics-authentication/image5.png" alt="Search data flow" style="width:60%" />
+  </figure>
+</div>
+
+<h3 id="implementation">Implementation</h3>
+
+<p>The key implementation details is as follows:</p>
+
+<ol>
+  <li>Grab’s HellfireSDK confirms if the device is not rooted.</li>
+  <li>Uses SHA512withECDSA for hashing algorithm.</li>
+  <li>Encrypted shared preferences/keychain to store data.</li>
+  <li>Secure enclave to store private keys.</li>
+</ol>
+
+<p>These key technologies allow us to create trust between devices and services. The raw biometric data stays within the device and instead sends an encrypted signature of biometry data to Grab for verification purposes.</p>
+
+<h3 id="impact">Impact</h3>
+
+<p>Biometric login aims to resolve the many problems highlighted earlier in this article such as reducing user friction and saving SMS OTP costs.</p>
+
+<p>We are still experimenting with this feature so we do not have insights on business impact yet. However, from early experiment runs, we estimate over 90% adoption rate and a success rate of nearly 90% for biometric logins.</p>
+
+<h2 id="learningsconclusion">Learnings/Conclusion</h2>
+
+<p>As methods of executing identity theft or social engineering get more creative, simply using passwords and PINs is not enough. Grab, and many other organisations, are realising that it’s important to augment existing security measures with methods that are inherent and unique to users.</p>
+
+<p>By using biometrics as an added layer of security in a multi-factor authentication strategy, we can keep our users safe and decrease the probability of successful attacks. Not only do we ensure that the user is a legitimate entity, we also ensure that we protect their privacy by ensuring that the biometric data remains on the user’s device.</p>
+
+<h2 id="whats-next">What’s next?</h2>
+
+<ul>
+  <li>IdentitySDK - this feature will be moved into an SDK so other teams integrate it via plug and play.</li>
+  <li>Standalone biometrics - biometric authentication is currently tightly coupled with PIN i.e. biometric authentication happens in place of PIN if biometric authentication is set up. Therefore, users would never see both PIN and biometric in the same session, which limits our robustness in terms of multi-factor authentication.</li>
+  <li>Integration with DAX and beyond - We plan to enable this feature for all teams who need to use biometric authentication.</li>
+</ul>
+
+<h2 id="join-us">Join us</h2>
+
+<p>Grab is a leading superapp in Southeast Asia, providing everyday services that matter to consumers. More than just a ride-hailing and food delivery app, Grab offers a wide range of on-demand services in the region, including mobility, food, package and grocery delivery services, mobile payments, and financial services across over 400 cities in eight countries.</p>
+
+<p>Powered by technology and driven by heart, our mission is to drive Southeast Asia forward by creating economic empowerment for everyone. If this mission speaks to you, <a href="https://grab.careers/">join our team</a> today!</p>
+:ET
